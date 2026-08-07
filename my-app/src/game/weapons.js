@@ -1,0 +1,48 @@
+export const WEAPONS = [
+  {
+    id: 'katana',
+    name: 'Classic Katana',
+    price: 0,
+    locked: false,
+    blade: '#f4f6fb',
+    glow: '#cbd5e1',
+    handle: '#b45309',
+    guard: '#d4af37',
+    trailColor: '255,255,255',
+  },
+  {
+    id: 'laser',
+    name: 'Neon Laser',
+    price: 499,
+    locked: false,
+    blade: '#22d3ee',
+    glow: '#22d3ee',
+    handle: '#0f172a',
+    guard: '#22d3ee',
+    trailColor: '34,211,238',
+  },
+  {
+    id: 'scythe',
+    name: 'Scythe',
+    price: 999,
+    locked: false,
+    blade: '#a3e635',
+    glow: '#a3e635',
+    handle: '#7c3f12',
+    guard: '#57534e',
+    trailColor: '163,230,53',
+  },
+  {
+    id: 'golden',
+    name: 'Golden Blade',
+    price: 2499,
+    locked: false,
+    blade: '#fbbf24',
+    glow: '#fbbf24',
+    handle: '#78350f',
+    guard: '#fde68a',
+    trailColor: '251,191,36',
+  },
+]
+
+export const PAID_SHOP_ENABLED = false
