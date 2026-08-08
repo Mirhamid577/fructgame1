@@ -1,0 +1,18 @@
+{
+  "version": 2,
+  "buildCommand": "cd my-app && npm run build",
+  "outputDirectory": "my-app/dist",
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ],
+  "headers": [
+    {
+      "source": "/vendor/hands/(.*)\\.wasm",
+      "headers": [{ "key": "Content-Type", "value": "application/wasm" }]
+    },
+    {
+      "source": "/vendor/hands/(.*)\\.(data|binarypb|tflite)",
+      "headers": [{ "key": "Content-Type", "value": "application/octet-stream" }]
+    }
+  ]
+}
