@@ -33,7 +33,8 @@ function WeaponPreview({ weapon }) {
     const ctx = canvas.getContext('2d')
     ctx.clearRect(0, 0, canvas.width, canvas.height)
     ctx.save()
-    ctx.translate(72, 112)
+    ctx.translate(76, 108)
+    ctx.scale(0.5, 0.5)
     ctx.rotate(-Math.PI / 4)
     drawSword(ctx, 0, 0, 0, weapon)
     ctx.restore()
@@ -172,7 +173,22 @@ function GameScreen({ weapon, stream, mode, onExit, onRestart }) {
         engine.start(mode === 'hand' ? tracker.video : null)
 
         let last = performance.now()
-        const tick = async () => {
+        let detecting = false
+        const detectTick = async () => {
+          if (disposed || detecting) return
+          detecting = true
+          try {
+            await tracker.estimate()
+            if (!disposed && !engine.over) {
+              engine.setBlades(tracker.computeBlades())
+            }
+          } catch (err) {
+            console.error(err)
+          } finally {
+            detecting = false
+          }
+        }
+        const tick = () => {
           if (disposed) return
           try {
             const now = performance.now()
@@ -180,11 +196,9 @@ function GameScreen({ weapon, stream, mode, onExit, onRestart }) {
             last = now
             if (!engine.over) {
               if (mode === 'hand') {
-                await tracker.estimate(now - startTime)
-                engine.setBlades(tracker.computeBlades())
-                const noHandsNow = tracker.hands.length === 0 && now - startTime > 2000
-                if (noHandsNow) setNoHands(true)
-                else setNoHands(false)
+                detectTick()
+                const noHandsNow = !tracker.hasHands && now - startTime > 2000
+                setNoHands(noHandsNow)
               } else {
                 engine.setBlades(pointer.segments)
                 pointer.segments = []
@@ -288,7 +302,7 @@ export default function App() {
     }
     try {
       const s = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
+        video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
         audio: false,
       })
       setStream(s)

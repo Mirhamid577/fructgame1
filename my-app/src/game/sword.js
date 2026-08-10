@@ -2,29 +2,30 @@ export function drawSword(ctx, x, y, angle, weapon) {
   ctx.save()
   ctx.translate(x, y)
   ctx.rotate(angle)
-  const len = 150
+  const len = 240
+  const u = len / 150
   ctx.shadowColor = weapon.glow
-  ctx.shadowBlur = 22
+  ctx.shadowBlur = 22 * u
   const blade = new Path2D()
-  blade.moveTo(0, -6.5)
+  blade.moveTo(0, -6.5 * u)
   blade.lineTo(len, 0)
-  blade.lineTo(0, 6.5)
+  blade.lineTo(0, 6.5 * u)
   blade.closePath()
   ctx.fillStyle = weapon.blade
   ctx.fill(blade)
   ctx.shadowBlur = 0
   ctx.strokeStyle = 'rgba(255,255,255,0.6)'
-  ctx.lineWidth = 1
+  ctx.lineWidth = 1 * u
   ctx.stroke(blade)
   ctx.fillStyle = weapon.guard
-  ctx.fillRect(-10, -11, 9, 22)
+  ctx.fillRect(-10 * u, -11 * u, 9 * u, 22 * u)
   ctx.fillStyle = weapon.handle
   ctx.beginPath()
-  ctx.roundRect(-48, -4.5, 38, 9, 4)
+  ctx.roundRect(-48 * u, -4.5 * u, 38 * u, 9 * u, 4 * u)
   ctx.fill()
   ctx.fillStyle = weapon.guard
   ctx.beginPath()
-  ctx.arc(-49, 0, 4.6, 0, Math.PI * 2)
+  ctx.arc(-49 * u, 0, 4.6 * u, 0, Math.PI * 2)
   ctx.fill()
   ctx.restore()
 }

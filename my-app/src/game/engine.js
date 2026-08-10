@@ -71,7 +71,7 @@ export class Game {
     for (let i = 0; i < burst; i += 1) {
       const bomb = Math.random() < Math.min(0.28, 0.08 + this.time * 0.004)
       const type = bomb ? 'bomb' : FRUITS[Math.floor(Math.random() * FRUITS.length)]
-      const r = bomb ? 34 : 26 + Math.random() * 14
+      const r = bomb ? 46 : 38 + Math.random() * 18
       this.fruits.push({
         type,
         x: r + Math.random() * (this.width - 2 * r),
