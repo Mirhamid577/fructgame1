@@ -2,7 +2,7 @@ export function drawSword(ctx, x, y, angle, weapon) {
   ctx.save()
   ctx.translate(x, y)
   ctx.rotate(angle)
-  const len = 240
+  const len = 300
   const u = len / 150
   ctx.shadowColor = weapon.glow
   ctx.shadowBlur = 22 * u

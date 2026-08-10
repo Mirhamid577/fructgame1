@@ -23,8 +23,8 @@ export class Game {
     this.canvas = canvas
     this.ctx = canvas.getContext('2d')
     this.weapon = weapon
-    this.width = 1280
-    this.height = 720
+    this.width = 960
+    this.height = 540
     canvas.width = this.width
     canvas.height = this.height
     this.reset()
@@ -71,7 +71,7 @@ export class Game {
     for (let i = 0; i < burst; i += 1) {
       const bomb = Math.random() < Math.min(0.28, 0.08 + this.time * 0.004)
       const type = bomb ? 'bomb' : FRUITS[Math.floor(Math.random() * FRUITS.length)]
-      const r = bomb ? 46 : 38 + Math.random() * 18
+      const r = bomb ? 70 : 58 + Math.random() * 22
       this.fruits.push({
         type,
         x: r + Math.random() * (this.width - 2 * r),

@@ -34,7 +34,7 @@ function WeaponPreview({ weapon }) {
     ctx.clearRect(0, 0, canvas.width, canvas.height)
     ctx.save()
     ctx.translate(76, 108)
-    ctx.scale(0.5, 0.5)
+    ctx.scale(0.4, 0.4)
     ctx.rotate(-Math.PI / 4)
     drawSword(ctx, 0, 0, 0, weapon)
     ctx.restore()
@@ -174,9 +174,12 @@ function GameScreen({ weapon, stream, mode, onExit, onRestart }) {
 
         let last = performance.now()
         let detecting = false
+        let lastDetectAt = 0
         const detectTick = async () => {
-          if (disposed || detecting) return
+          const now = performance.now()
+          if (disposed || detecting || now - lastDetectAt < 33) return
           detecting = true
+          lastDetectAt = now
           try {
             await tracker.estimate()
             if (!disposed && !engine.over) {
@@ -188,6 +191,7 @@ function GameScreen({ weapon, stream, mode, onExit, onRestart }) {
             detecting = false
           }
         }
+        let lastNoHands = false
         const tick = () => {
           if (disposed) return
           try {
@@ -198,7 +202,10 @@ function GameScreen({ weapon, stream, mode, onExit, onRestart }) {
               if (mode === 'hand') {
                 detectTick()
                 const noHandsNow = !tracker.hasHands && now - startTime > 2000
-                setNoHands(noHandsNow)
+                if (noHandsNow !== lastNoHands) {
+                  lastNoHands = noHandsNow
+                  setNoHands(noHandsNow)
+                }
               } else {
                 engine.setBlades(pointer.segments)
                 pointer.segments = []
