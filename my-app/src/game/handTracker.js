@@ -1,5 +1,3 @@
-import * as handPoseDetection from '@tensorflow-models/hand-pose-detection'
-
 const SOLUTION_PATH = '/vendor/hands'
 
 export const HAND_CONNECTIONS = [
@@ -16,35 +14,27 @@ export const INDEX_TIP = 8
 const SMOOTHING = 0.55
 const MIN_BLADE_LEN = 2.5
 
-let cachedDetector = null
-let cachedModelType = null
+let cachedHands = null
+let cachedInitialized = false
 
-async function getDetector(modelType, maxHands) {
-  if (!cachedDetector || cachedModelType !== modelType) {
-    cachedDetector = await handPoseDetection.createDetector(
-      handPoseDetection.SupportedModels.MediaPipeHands,
-      {
-        runtime: 'mediapipe',
-        solutionPath: SOLUTION_PATH,
-        modelType,
-        maxHands,
-        minDetectionConfidence: 0.5,
-        minTrackingConfidence: 0.5,
-      },
-    )
-    cachedModelType = modelType
+function getHands() {
+  if (!cachedHands) {
+    if (typeof globalThis.Hands !== 'function') {
+      throw new Error('Модель рук MediaPipe не загрузилась. Проверь, что игра открыта по https и файлы /vendor/hands доступны.')
+    }
+    cachedHands = new globalThis.Hands({ locateFile: (file) => `${SOLUTION_PATH}/${file}` })
   }
-  return cachedDetector
+  return cachedHands
 }
 
 export class HandTracker {
   constructor(width, height, opts = {}) {
     this.width = width
     this.height = height
-    this.modelType = opts.modelType ?? 'lite'
     this.maxHands = opts.maxHands ?? 2
-    this.detector = null
-    this.hands = []
+    this.modelComplexity = opts.modelComplexity ?? 0
+    this.hands = null
+    this.landmarks = []
     this.prevTips = new Map()
     this.smoothTips = new Map()
     this.lastDetected = -1
@@ -57,38 +47,58 @@ export class HandTracker {
   }
 
   get hasHands() {
-    return this.hands.length > 0
+    return this.landmarks.length > 0
   }
 
   async loadModel() {
-    if (!this.detector) {
-      this.detector = await getDetector(this.modelType, this.maxHands)
+    if (!this.hands) {
+      const hands = getHands()
+      hands.setOptions({
+        maxNumHands: this.maxHands,
+        modelComplexity: this.modelComplexity,
+        minDetectionConfidence: 0.5,
+        minTrackingConfidence: 0.5,
+      })
+      hands.onResults((res) => this.onResults(res))
+      if (!cachedInitialized) {
+        await hands.initialize()
+        cachedInitialized = true
+      }
+      this.hands = hands
     }
-    return this.detector
+    return this.hands
+  }
+
+  onResults(results) {
+    const list = []
+    const labels = results.multiHandedness ?? []
+    const landmarkLists = results.multiHandLandmarks ?? []
+    for (let i = 0; i < landmarkLists.length; i += 1) {
+      list.push({ keypoints: landmarkLists[i], handedness: labels[i]?.label ?? String(i) })
+    }
+    this.landmarks = list
   }
 
   async estimate(time = 0) {
-    if (!this.detector || this.video.readyState < 2) return []
+    if (!this.hands || this.video.readyState < 2) return []
     try {
-      this.hands = await this.detector.estimateHands(this.video, {
-        flipHorizontal: true,
-        staticImageMode: false,
-      })
+      await this.hands.send({ image: this.video })
     } catch {
-      this.hands = []
+      this.landmarks = []
+      return []
     }
-    if (this.hands.length > 0) this.lastDetected = time
-    return this.hands
+    if (this.landmarks.length > 0) this.lastDetected = time
+    return this.landmarks
   }
 
   computeBlades() {
     const blades = []
     const seen = new Set()
-    for (const hand of this.hands) {
+    for (const hand of this.landmarks) {
       const key = hand.handedness
       seen.add(key)
       const tip = hand.keypoints[INDEX_TIP]
-      let x = tip.x * this.width
+      let x = (1 - tip.x) * this.width
       let y = tip.y * this.height
       const prevSmooth = this.smoothTips.get(key)
       if (prevSmooth) {
@@ -97,10 +107,8 @@ export class HandTracker {
       }
       this.smoothTips.set(key, { x, y })
       const prev = this.prevTips.get(key)
-      if (prev) {
-        if (Math.hypot(x - prev.x, y - prev.y) > MIN_BLADE_LEN) {
-          blades.push({ x0: prev.x, y0: prev.y, x1: x, y1: y })
-        }
+      if (prev && Math.hypot(x - prev.x, y - prev.y) > MIN_BLADE_LEN) {
+        blades.push({ x0: prev.x, y0: prev.y, x1: x, y1: y })
       }
       this.prevTips.set(key, { x, y })
     }
@@ -114,39 +122,35 @@ export class HandTracker {
   }
 
   drawSkeleton(ctx, time = 0) {
-    for (const hand of this.hands) {
+    const { width, height } = this
+    for (const hand of this.landmarks) {
       const pts = hand.keypoints
+      const X = (i) => (1 - pts[i].x) * width
+      const Y = (i) => pts[i].y * height
       ctx.save()
       ctx.lineCap = 'round'
       ctx.lineJoin = 'round'
       ctx.shadowColor = 'rgba(0,255,170,0.9)'
       ctx.shadowBlur = 14
       for (const [a, b] of HAND_CONNECTIONS) {
-        const x0 = pts[a].x * this.width
-        const y0 = pts[a].y * this.height
-        const x1 = pts[b].x * this.width
-        const y1 = pts[b].y * this.height
         ctx.strokeStyle = 'rgba(0,255,170,0.85)'
         ctx.lineWidth = 6
         ctx.beginPath()
-        ctx.moveTo(x0, y0)
-        ctx.lineTo(x1, y1)
+        ctx.moveTo(X(a), Y(a))
+        ctx.lineTo(X(b), Y(b))
         ctx.stroke()
       }
       for (let i = 0; i < pts.length; i += 1) {
-        const x = pts[i].x * this.width
-        const y = pts[i].y * this.height
         ctx.beginPath()
-        ctx.arc(x, y, i === INDEX_TIP ? 10 : 5.5, 0, Math.PI * 2)
+        ctx.arc(X(i), Y(i), i === INDEX_TIP ? 10 : 5.5, 0, Math.PI * 2)
         ctx.fillStyle = i === INDEX_TIP ? '#ff3b6b' : '#00ffaa'
         ctx.fill()
         ctx.strokeStyle = 'rgba(255,255,255,0.9)'
         ctx.lineWidth = 1.5
         ctx.stroke()
       }
-      const t = pts[INDEX_TIP]
-      const tx = t.x * this.width
-      const ty = t.y * this.height
+      const tx = X(INDEX_TIP)
+      const ty = Y(INDEX_TIP)
       const pulse = 1 + Math.sin(time * 6) * 0.15
       const g = ctx.createRadialGradient(tx, ty, 2, tx, ty, 36 * pulse)
       g.addColorStop(0, 'rgba(255,59,107,0.55)')

@@ -42,7 +42,7 @@ export class Game {
     this.comboTimer = 0
     this.lives = 3
     this.time = 0
-    this.spawnTimer = 0.5
+    this.spawnTimer = 0.8
     this.over = false
     this._notified = false
     this.shake = 0
@@ -67,7 +67,7 @@ export class Game {
   }
 
   spawn() {
-    const burst = Math.random() < 0.35 ? 2 + Math.floor(Math.random() * 3) : 1
+    const burst = Math.random() < 0.3 ? 2 + Math.floor(Math.random() * 2) : 1
     for (let i = 0; i < burst; i += 1) {
       const bomb = Math.random() < Math.min(0.28, 0.08 + this.time * 0.004)
       const type = bomb ? 'bomb' : FRUITS[Math.floor(Math.random() * FRUITS.length)]
@@ -93,7 +93,7 @@ export class Game {
     this.spawnTimer -= dt
     if (this.spawnTimer <= 0) {
       this.spawn()
-      this.spawnTimer = Math.max(0.35, 0.9 - this.time * 0.012)
+      this.spawnTimer = Math.max(0.7, 1.35 - this.time * 0.006)
     }
 
     if (this.comboTimer > 0) {
@@ -232,7 +232,7 @@ export class Game {
       ctx.fillStyle = '#0b1020'
       ctx.fillRect(0, 0, w, h)
     }
-    ctx.fillStyle = 'rgba(8,12,24,0.32)'
+    ctx.fillStyle = 'rgba(8,12,24,0.2)'
     ctx.fillRect(0, 0, w, h)
 
     if (this.shake > 0) {

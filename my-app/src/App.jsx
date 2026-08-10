@@ -238,7 +238,7 @@ function GameScreen({ weapon, stream, mode, onExit, onRestart }) {
       )}
       {noHands && mode === 'hand' && !over && (
         <div className="fixed bottom-6 left-1/2 z-10 -translate-x-1/2 rounded-full border border-[#232c46] bg-[rgba(10,15,30,0.9)] px-5 py-2.5 text-sm text-cyan-300">
-          Покажи руку в кадре — скелет появится на экране
+          Покажи открытую ладонь перед камерой, добавь света — скелет появится и меч полетит за пальцем
         </div>
       )}
       {over && (
