@@ -47,16 +47,6 @@ export class HandTracker {
     this.video.playsInline = true
   }
 
-  async initCamera() {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { width: 1280, height: 720 },
-      audio: false,
-    })
-    this.video.srcObject = stream
-    await this.video.play()
-    return stream
-  }
-
   async loadModel() {
     if (!this.detector) {
       this.detector = await getDetector(this.modelType, this.maxHands)
