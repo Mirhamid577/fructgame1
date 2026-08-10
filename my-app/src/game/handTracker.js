@@ -13,6 +13,9 @@ export const HAND_CONNECTIONS = [
 
 export const INDEX_TIP = 8
 
+const SMOOTHING = 0.55
+const MIN_BLADE_LEN = 2.5
+
 let cachedDetector = null
 let cachedModelType = null
 
@@ -25,6 +28,8 @@ async function getDetector(modelType, maxHands) {
         solutionPath: SOLUTION_PATH,
         modelType,
         maxHands,
+        minDetectionConfidence: 0.5,
+        minTrackingConfidence: 0.5,
       },
     )
     cachedModelType = modelType
@@ -41,10 +46,18 @@ export class HandTracker {
     this.detector = null
     this.hands = []
     this.prevTips = new Map()
+    this.smoothTips = new Map()
+    this.lastDetected = -1
     this.video = document.createElement('video')
     this.video.autoplay = true
     this.video.muted = true
     this.video.playsInline = true
+    this.video.width = width
+    this.video.height = height
+  }
+
+  get hasHands() {
+    return this.hands.length > 0
   }
 
   async loadModel() {
@@ -54,12 +67,17 @@ export class HandTracker {
     return this.detector
   }
 
-  async estimate() {
+  async estimate(time = 0) {
     if (!this.detector || this.video.readyState < 2) return []
-    this.hands = await this.detector.estimateHands(this.video, {
-      flipHorizontal: true,
-      staticImageMode: true,
-    })
+    try {
+      this.hands = await this.detector.estimateHands(this.video, {
+        flipHorizontal: true,
+        staticImageMode: false,
+      })
+    } catch {
+      this.hands = []
+    }
+    if (this.hands.length > 0) this.lastDetected = time
     return this.hands
   }
 
@@ -70,48 +88,74 @@ export class HandTracker {
       const key = hand.handedness
       seen.add(key)
       const tip = hand.keypoints[INDEX_TIP]
-      const x = tip.x * this.width
-      const y = tip.y * this.height
+      let x = tip.x * this.width
+      let y = tip.y * this.height
+      const prevSmooth = this.smoothTips.get(key)
+      if (prevSmooth) {
+        x = prevSmooth.x + (x - prevSmooth.x) * (1 - SMOOTHING)
+        y = prevSmooth.y + (y - prevSmooth.y) * (1 - SMOOTHING)
+      }
+      this.smoothTips.set(key, { x, y })
       const prev = this.prevTips.get(key)
       if (prev) {
-        blades.push({ x0: prev.x, y0: prev.y, x1: x, y1: y })
+        if (Math.hypot(x - prev.x, y - prev.y) > MIN_BLADE_LEN) {
+          blades.push({ x0: prev.x, y0: prev.y, x1: x, y1: y })
+        }
       }
       this.prevTips.set(key, { x, y })
     }
     for (const key of [...this.prevTips.keys()]) {
-      if (!seen.has(key)) this.prevTips.delete(key)
+      if (!seen.has(key)) {
+        this.prevTips.delete(key)
+        this.smoothTips.delete(key)
+      }
     }
     return blades
   }
 
-  drawSkeleton(ctx) {
+  drawSkeleton(ctx, time = 0) {
     for (const hand of this.hands) {
       const pts = hand.keypoints
-      ctx.strokeStyle = 'rgba(0,255,170,0.9)'
-      ctx.lineWidth = 3
+      ctx.save()
       ctx.lineCap = 'round'
+      ctx.lineJoin = 'round'
+      ctx.shadowColor = 'rgba(0,255,170,0.9)'
+      ctx.shadowBlur = 14
       for (const [a, b] of HAND_CONNECTIONS) {
+        const x0 = pts[a].x * this.width
+        const y0 = pts[a].y * this.height
+        const x1 = pts[b].x * this.width
+        const y1 = pts[b].y * this.height
+        ctx.strokeStyle = 'rgba(0,255,170,0.85)'
+        ctx.lineWidth = 6
         ctx.beginPath()
-        ctx.moveTo(pts[a].x * this.width, pts[a].y * this.height)
-        ctx.lineTo(pts[b].x * this.width, pts[b].y * this.height)
+        ctx.moveTo(x0, y0)
+        ctx.lineTo(x1, y1)
         ctx.stroke()
       }
       for (let i = 0; i < pts.length; i += 1) {
+        const x = pts[i].x * this.width
+        const y = pts[i].y * this.height
         ctx.beginPath()
-        ctx.arc(pts[i].x * this.width, pts[i].y * this.height, i === INDEX_TIP ? 6 : 4, 0, Math.PI * 2)
+        ctx.arc(x, y, i === INDEX_TIP ? 10 : 5.5, 0, Math.PI * 2)
         ctx.fillStyle = i === INDEX_TIP ? '#ff3b6b' : '#00ffaa'
         ctx.fill()
+        ctx.strokeStyle = 'rgba(255,255,255,0.9)'
+        ctx.lineWidth = 1.5
+        ctx.stroke()
       }
       const t = pts[INDEX_TIP]
       const tx = t.x * this.width
       const ty = t.y * this.height
-      const g = ctx.createRadialGradient(tx, ty, 2, tx, ty, 30)
-      g.addColorStop(0, 'rgba(255,59,107,0.5)')
+      const pulse = 1 + Math.sin(time * 6) * 0.15
+      const g = ctx.createRadialGradient(tx, ty, 2, tx, ty, 36 * pulse)
+      g.addColorStop(0, 'rgba(255,59,107,0.55)')
       g.addColorStop(1, 'rgba(255,59,107,0)')
       ctx.fillStyle = g
       ctx.beginPath()
-      ctx.arc(tx, ty, 30, 0, Math.PI * 2)
+      ctx.arc(tx, ty, 36 * pulse, 0, Math.PI * 2)
       ctx.fill()
+      ctx.restore()
     }
   }
 }

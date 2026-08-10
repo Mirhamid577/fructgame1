@@ -4,13 +4,18 @@ import { HandTracker } from './game/handTracker'
 import { Game } from './game/engine'
 import { drawSword } from './game/sword'
 
+const MODES = [
+  { id: 'hand', title: 'Рука', desc: 'Режь жестом руки через камеру' },
+  { id: 'mouse', title: 'Меч', desc: 'Режь мышью или пальцем — камера не нужна' },
+]
+
 function cameraErrorHint(err) {
   const name = err?.name || ''
   if (name === 'NotFoundError' || name === 'DevicesNotFoundError' || name === 'OverconstrainedError') {
-    return 'Камера не найдена. Проверь, что она включена, не занята другой программой, и в настройках приватности Windows разрешён доступ к камере. Затем нажми «Играть» ещё раз.'
+    return 'Камера не найдена. Проверь, что она включена, не занята другой программой, и в настройках приватности Windows разрешён доступ к камере. Или выбери режим «Меч» — он работает без камеры.'
   }
   if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
-    return 'Доступ к камере запрещён. Разреши камеру в настройках браузера и нажми «Играть» ещё раз.'
+    return 'Доступ к камере запрещён. Разреши камеру в браузере и нажми «Играть» ещё раз. Или выбери режим «Меч» без камеры.'
   }
   if (name === 'NotReadableError' || name === 'AbortError') {
     return 'Камера уже занята другой программой (Zoom, Teams, камера Windows). Закрой её и нажми «Играть» ещё раз.'
@@ -36,7 +41,7 @@ function WeaponPreview({ weapon }) {
   return <canvas ref={ref} width={150} height={140} className="block mx-auto" />
 }
 
-function Menu({ weapon, setWeapon, onStart, error }) {
+function Menu({ weapon, setWeapon, mode, setMode, onStart, error }) {
   return (
     <div
       className="min-h-dvh flex flex-col items-center gap-4 px-5 py-10 text-center"
@@ -50,8 +55,27 @@ function Menu({ weapon, setWeapon, onStart, error }) {
       </h1>
 
       <p className="max-w-[560px] text-gray-400">
-        Режь фрукты рукой в воздухе — меч летит за пальцем. Бомбы трогать нельзя!
+        Режь фрукты — рукой в воздухе или мечом. Бомбы трогать нельзя!
       </p>
+
+      <h2 className="mt-2 text-xl text-gray-200">Как будешь резать?</h2>
+      <div className="grid w-full max-w-[560px] grid-cols-1 gap-4 sm:grid-cols-2">
+        {MODES.map((m) => (
+          <button
+            type="button"
+            key={m.id}
+            onClick={() => setMode(m.id)}
+            className={`cursor-pointer rounded-2xl p-5 transition hover:-translate-y-1 ${
+              mode === m.id
+                ? 'border-2 border-cyan-400 bg-gradient-to-b from-[#152b3a] to-[#0d1220] shadow-[0_0_24px_rgba(34,211,238,0.35)]'
+                : 'border-2 border-[#232c46] bg-gradient-to-b from-[#151b2e] to-[#0d1220]'
+            }`}
+          >
+            <div className="text-lg font-extrabold text-white">{m.title}</div>
+            <div className="mt-1 text-sm text-gray-400">{m.desc}</div>
+          </button>
+        ))}
+      </div>
 
       <h2 className="mt-2 text-xl text-gray-200">Выбери меч</h2>
       <div className="grid w-full max-w-[760px] grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-4">
@@ -73,10 +97,6 @@ function Menu({ weapon, setWeapon, onStart, error }) {
         ))}
       </div>
 
-      <p className="text-sm text-gray-500">
-        Понадобится разрешение на камеру. Магазин с платными мечами — скоро.
-      </p>
-
       {error && <p className="max-w-[560px] text-sm text-red-400">{error}</p>}
 
       <button
@@ -90,31 +110,66 @@ function Menu({ weapon, setWeapon, onStart, error }) {
   )
 }
 
-function GameScreen({ weapon, stream, onExit, onRestart }) {
+function GameScreen({ weapon, stream, mode, onExit, onRestart }) {
   const canvasRef = useRef(null)
   const [status, setStatus] = useState('')
   const [error, setError] = useState('')
   const [over, setOver] = useState(false)
   const [score, setScore] = useState(0)
+  const [noHands, setNoHands] = useState(false)
 
   useEffect(() => {
     let disposed = false
     let raf = 0
     let tracker = null
     let engine = null
+    const startTime = performance.now()
+    const pointer = { x: null, y: null, segments: [] }
 
     async function init() {
       try {
         const canvas = canvasRef.current
         engine = new Game(canvas, weapon)
-        tracker = new HandTracker(engine.width, engine.height, { modelType: 'lite' })
-        tracker.video.srcObject = stream
-        await tracker.video.play()
+        engine.setHint(mode === 'mouse' ? 'Води мышью или пальцем и режь фрукты!' : 'Режь фрукты движением руки!')
 
-        setStatus('Загружаем модель TensorFlow...')
-        await tracker.loadModel()
-        setStatus('')
-        engine.start(tracker.video)
+        if (mode === 'hand') {
+          tracker = new HandTracker(engine.width, engine.height, { modelType: 'lite' })
+          tracker.video.srcObject = stream
+          await tracker.video.play()
+          setStatus('Загружаем модель TensorFlow...')
+          await tracker.loadModel()
+          setStatus('')
+        } else {
+          const toEngine = (e) => {
+            const rect = canvas.getBoundingClientRect()
+            return {
+              x: ((e.clientX - rect.left) / rect.width) * engine.width,
+              y: ((e.clientY - rect.top) / rect.height) * engine.height,
+            }
+          }
+          const onPointerMove = (e) => {
+            const { x, y } = toEngine(e)
+            if (pointer.x != null && Math.hypot(x - pointer.x, y - pointer.y) > 3) {
+              pointer.segments.push({ x0: pointer.x, y0: pointer.y, x1: x, y1: y })
+            }
+            pointer.x = x
+            pointer.y = y
+          }
+          const onPointerEnd = () => {
+            pointer.x = null
+            pointer.y = null
+          }
+          canvas.addEventListener('pointermove', onPointerMove)
+          canvas.addEventListener('pointerup', onPointerEnd)
+          canvas.addEventListener('pointerleave', onPointerEnd)
+          engine.pointerCleanup = () => {
+            canvas.removeEventListener('pointermove', onPointerMove)
+            canvas.removeEventListener('pointerup', onPointerEnd)
+            canvas.removeEventListener('pointerleave', onPointerEnd)
+          }
+        }
+
+        engine.start(mode === 'hand' ? tracker.video : null)
 
         let last = performance.now()
         const tick = async () => {
@@ -124,8 +179,16 @@ function GameScreen({ weapon, stream, onExit, onRestart }) {
             const dt = Math.min(0.05, (now - last) / 1000)
             last = now
             if (!engine.over) {
-              await tracker.estimate()
-              engine.setBlades(tracker.computeBlades())
+              if (mode === 'hand') {
+                await tracker.estimate(now - startTime)
+                engine.setBlades(tracker.computeBlades())
+                const noHandsNow = tracker.hands.length === 0 && now - startTime > 2000
+                if (noHandsNow) setNoHands(true)
+                else setNoHands(false)
+              } else {
+                engine.setBlades(pointer.segments)
+                pointer.segments = []
+              }
               engine.update(dt)
             } else {
               engine.update(dt)
@@ -154,14 +217,15 @@ function GameScreen({ weapon, stream, onExit, onRestart }) {
     return () => {
       disposed = true
       cancelAnimationFrame(raf)
+      if (engine?.pointerCleanup) engine.pointerCleanup()
       tracker = null
       engine = null
     }
-  }, [weapon, stream])
+  }, [weapon, stream, mode])
 
   return (
     <div className="fixed inset-0 flex items-center justify-center overflow-hidden bg-[#05070f]">
-      <canvas ref={canvasRef} />
+      <canvas ref={canvasRef} className="max-h-full max-w-full touch-none" />
       {status && (
         <div className="fixed left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 rounded-xl border border-[#232c46] bg-[rgba(10,15,30,0.85)] px-7 py-3.5 font-semibold text-white">
           {status}
@@ -170,6 +234,11 @@ function GameScreen({ weapon, stream, onExit, onRestart }) {
       {error && (
         <div className="fixed left-1/2 top-1/2 z-10 max-w-[80vw] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-red-500 bg-[rgba(127,29,29,0.9)] px-7 py-3.5 text-white">
           Ошибка: {error}
+        </div>
+      )}
+      {noHands && mode === 'hand' && !over && (
+        <div className="fixed bottom-6 left-1/2 z-10 -translate-x-1/2 rounded-full border border-[#232c46] bg-[rgba(10,15,30,0.9)] px-5 py-2.5 text-sm text-cyan-300">
+          Покажи руку в кадре — скелет появится на экране
         </div>
       )}
       {over && (
@@ -201,14 +270,20 @@ function GameScreen({ weapon, stream, onExit, onRestart }) {
 export default function App() {
   const [screen, setScreen] = useState('menu')
   const [weapon, setWeapon] = useState(WEAPONS[0])
+  const [mode, setMode] = useState('hand')
   const [runId, setRunId] = useState(0)
   const [stream, setStream] = useState(null)
   const [startError, setStartError] = useState('')
 
   async function handleStart() {
     setStartError('')
+    if (mode === 'mouse') {
+      setRunId((id) => id + 1)
+      setScreen('game')
+      return
+    }
     if (!navigator.mediaDevices?.getUserMedia) {
-      setStartError('Камера доступна только через HTTPS или localhost. Открой игру по ссылке, начинающейся с https://')
+      setStartError('Камера доступна только через HTTPS или localhost. Открой игру по ссылке https:// или выбери режим «Меч».')
       return
     }
     try {
@@ -233,7 +308,16 @@ export default function App() {
   }
 
   if (screen === 'menu') {
-    return <Menu weapon={weapon} setWeapon={setWeapon} onStart={handleStart} error={startError} />
+    return (
+      <Menu
+        weapon={weapon}
+        setWeapon={setWeapon}
+        mode={mode}
+        setMode={setMode}
+        onStart={handleStart}
+        error={startError}
+      />
+    )
   }
 
   return (
@@ -241,6 +325,7 @@ export default function App() {
       key={runId}
       weapon={weapon}
       stream={stream}
+      mode={mode}
       onExit={handleExit}
       onRestart={() => setRunId((id) => id + 1)}
     />

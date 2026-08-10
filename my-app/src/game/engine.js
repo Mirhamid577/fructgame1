@@ -142,6 +142,10 @@ export class Game {
     this.blades = []
   }
 
+  setHint(text) {
+    this.hint = text
+  }
+
   applySlice(seg) {
     if (Math.hypot(seg.x1 - seg.x0, seg.y1 - seg.y0) < MIN_SLICE_SPEED) return
     for (let i = this.fruits.length - 1; i >= 0; i -= 1) {
@@ -247,14 +251,14 @@ export class Game {
       drawSword(ctx, this.lastBlade.x1, this.lastBlade.y1, this.lastAngle, this.weapon)
     }
     this.drawFloaters()
-    if (tracker) tracker.drawSkeleton(ctx)
+    if (tracker) tracker.drawSkeleton(ctx, this.time)
     this.drawHUD()
 
     if (this.time < 4) {
       ctx.textAlign = 'center'
       ctx.font = '700 30px system-ui'
       ctx.fillStyle = `rgba(255,255,255,${Math.max(0, 1 - (this.time - 2.5) / 1.5)})`
-      ctx.fillText('Режь фрукты движением руки!', w / 2, h * 0.45)
+      ctx.fillText(this.hint ?? 'Режь фрукты движением руки!', w / 2, h * 0.45)
     }
 
     ctx.restore()
